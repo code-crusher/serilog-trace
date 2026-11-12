@@ -109,6 +109,14 @@ Serilog has an active and helpful community who are happy to help point you in t
 
 All projects in the https://github.com/serilog GitHub organization are actively maintained, on varying development cadences. Legacy/unmaintained projects are preserved in the [Serilog Archive](https://github.com/serilog-archive).
 
+### Digitally signing Serilog assemblies
+
+The `Serilog` package published to NuGet.org is signed by NuGet.org, but the `Serilog.dll` assemblies it contains are not Authenticode-signed. If your build or audit process requires signed binaries, you may sign these assemblies with your own certificate and redistribute them.
+
+This is permitted by the [Apache License, Version 2.0](https://apache.org/licenses/LICENSE-2.0.html), under which Serilog is provided. Copyright in Serilog is held collectively by the Serilog Contributors, so the project cannot grant permissions beyond those in the license: when redistributing signed copies, keep the copyright and license notices intact, and don't suggest that the result is endorsed by the Serilog project. See [issue #2225](https://github.com/serilog/serilog/issues/2225).
+
+The assemblies are strong-named with public key token `24c2f752a8e58a10`. Authenticode signing (for example with `signtool`) appends a certificate to the PE file and leaves the strong name, public key token, and version unchanged, so re-signed assemblies remain compatible with code compiled against the originals. Re-signing with a *different* strong-name key would change the public key token and break that compatibility. (This is provided for convenience and is not legal advice.)
+
 ### Contributing
 
 Would you like to help make Serilog even better? We keep a list of issues that are approachable for newcomers under the [up-for-grabs](https://github.com/issues?utf8=✓&q=is%3Aopen+is%3Aissue+archived%3Afalse+user%3Aserilog+label%3Aup-for-grabs) label (accessible only when logged into GitHub).
