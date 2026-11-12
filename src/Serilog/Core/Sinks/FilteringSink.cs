@@ -14,7 +14,7 @@
 
 namespace Serilog.Core.Sinks;
 
-class FilteringSink : ILogEventSink
+class FilteringSink : ILogEventSink, IFlushableLogEventSink
 {
     readonly ILogEventSink _sink;
     readonly bool _propagateExceptions;
@@ -42,6 +42,23 @@ class FilteringSink : ILogEventSink
         catch (Exception ex)
         {
             SelfLog.WriteLine("Caught exception while applying filters: {0}", ex);
+
+            if (_propagateExceptions)
+                throw;
+        }
+    }
+
+    public async Task FlushAsync()
+    {
+        if (_sink is not IFlushableLogEventSink flushable) return;
+
+        try
+        {
+            await flushable.FlushAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            SelfLog.WriteLine("Caught exception while flushing sink: {0}", ex);
 
             if (_propagateExceptions)
                 throw;

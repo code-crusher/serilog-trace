@@ -14,7 +14,7 @@
 
 namespace Serilog.Core.Sinks;
 
-class AggregateSink : ILogEventSink
+class AggregateSink : ILogEventSink, IFlushableLogEventSink
 {
     readonly ILogEventSink[] _sinks;
 
@@ -44,5 +44,28 @@ class AggregateSink : ILogEventSink
 
         if (exceptions != null)
             throw new AggregateException("Failed to emit a log event.", exceptions);
+    }
+
+    public async Task FlushAsync()
+    {
+        List<Exception>? exceptions = null;
+        foreach (var sink in _sinks)
+        {
+            if (sink is not IFlushableLogEventSink flushable) continue;
+
+            try
+            {
+                await flushable.FlushAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                SelfLog.WriteLine("Caught exception while flushing sink {0}: {1}", sink, ex);
+                exceptions ??= [];
+                exceptions.Add(ex);
+            }
+        }
+
+        if (exceptions != null)
+            throw new AggregateException("Failed to flush a sink.", exceptions);
     }
 }

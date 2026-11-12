@@ -46,6 +46,29 @@ public static class Log
     }
 
     /// <summary>
+    /// Write any buffered log events to the sinks in the pipeline, without closing or disposing it.
+    /// Logging can continue normally afterwards.
+    /// </summary>
+    /// <returns>A task that completes when the sinks that support flushing have written their buffered
+    /// events, or when their attempts to do so have failed.</returns>
+    /// <remarks>Flushing is best-effort, and is performed by sinks implementing
+    /// <see cref="IFlushableLogEventSink"/>. Sinks that do not buffer events, or that cannot flush
+    /// on demand, are unaffected. Use <see cref="CloseAndFlush"/> to flush and dispose the pipeline
+    /// when logging is complete.</remarks>
+    public static async Task FlushAsync()
+    {
+        try
+        {
+            await Logger.FlushAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            // Like the other methods on `Log`, this must not throw.
+            Debugging.SelfLog.WriteLine("Caught exception while flushing the logger: {0}", ex);
+        }
+    }
+
+    /// <summary>
     /// Resets <see cref="Logger"/> to the default and disposes the original if possible
     /// </summary>
     public static void CloseAndFlush()

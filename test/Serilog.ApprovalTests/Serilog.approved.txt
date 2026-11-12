@@ -133,6 +133,10 @@ namespace Serilog.Core
     {
         bool TryDestructure(object value, Serilog.Core.ILogEventPropertyValueFactory propertyValueFactory, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out Serilog.Events.LogEventPropertyValue? result);
     }
+    public interface IFlushableLogEventSink
+    {
+        System.Threading.Tasks.Task FlushAsync();
+    }
     public interface ILogEventEnricher
     {
         void Enrich(Serilog.Events.LogEvent logEvent, Serilog.Core.ILogEventPropertyFactory propertyFactory);
@@ -161,7 +165,7 @@ namespace Serilog.Core
     {
         void SetFailureListener(Serilog.Core.ILoggingFailureListener failureListener);
     }
-    public sealed class Logger : Serilog.Core.ILogEventSink, Serilog.ILogger, System.IAsyncDisposable, System.IDisposable
+    public sealed class Logger : Serilog.Core.IFlushableLogEventSink, Serilog.Core.ILogEventSink, Serilog.ILogger, System.IAsyncDisposable, System.IDisposable
     {
         public static Serilog.ILogger None { get; }
         [Serilog.Core.MessageTemplateFormatMethod("messageTemplate")]
@@ -229,6 +233,7 @@ namespace Serilog.Core
         public void Fatal<T0, T1, T2>(string messageTemplate, T0 propertyValue0, T1 propertyValue1, T2 propertyValue2) { }
         [Serilog.Core.MessageTemplateFormatMethod("messageTemplate")]
         public void Fatal<T0, T1, T2>(System.Exception? exception, string messageTemplate, T0 propertyValue0, T1 propertyValue1, T2 propertyValue2) { }
+        public System.Threading.Tasks.Task FlushAsync() { }
         public Serilog.ILogger ForContext(Serilog.Core.ILogEventEnricher enricher) { }
         public Serilog.ILogger ForContext(System.Collections.Generic.IEnumerable<Serilog.Core.ILogEventEnricher> enrichers) { }
         public Serilog.ILogger ForContext(System.Type source) { }
@@ -762,6 +767,7 @@ namespace Serilog
         public static void Fatal<T0, T1, T2>(string messageTemplate, T0 propertyValue0, T1 propertyValue1, T2 propertyValue2) { }
         [Serilog.Core.MessageTemplateFormatMethod("messageTemplate")]
         public static void Fatal<T0, T1, T2>(System.Exception? exception, string messageTemplate, T0 propertyValue0, T1 propertyValue1, T2 propertyValue2) { }
+        public static System.Threading.Tasks.Task FlushAsync() { }
         public static Serilog.ILogger ForContext(Serilog.Core.ILogEventEnricher enricher) { }
         public static Serilog.ILogger ForContext(Serilog.Core.ILogEventEnricher[] enrichers) { }
         public static Serilog.ILogger ForContext(System.Type source) { }
@@ -864,6 +870,7 @@ namespace Serilog
     }
     public static class LoggerExtensions
     {
+        public static System.Threading.Tasks.Task FlushAsync(this Serilog.ILogger logger) { }
         public static Serilog.ILogger ForContext<TValue>(this Serilog.ILogger logger, Serilog.Events.LogEventLevel level, string propertyName, TValue value, bool destructureObjects = false) { }
     }
 }

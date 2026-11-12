@@ -23,7 +23,9 @@ namespace Serilog.Core;
 /// be disposed to flush any events buffered within it. Most application
 /// code should depend on <see cref="ILogger"/>, not this class.
 /// </summary>
-public sealed class Logger : ILogger, ILogEventSink, IDisposable
+/// <remarks><see cref="FlushAsync"/> can be used to flush buffered events without
+/// disposing the pipeline.</remarks>
+public sealed class Logger : ILogger, ILogEventSink, IFlushableLogEventSink, IDisposable
 #if FEATURE_ASYNCDISPOSABLE
     , IAsyncDisposable
 #endif
@@ -1443,6 +1445,20 @@ public sealed class Logger : ILogger, ILogEventSink, IDisposable
 
         property = _messageTemplateProcessor.CreateProperty(propertyName, value, destructureObjects);
         return true;
+    }
+
+    /// <summary>
+    /// Write any buffered log events to the sinks in the pipeline, without closing or disposing it.
+    /// Logging can continue normally afterwards.
+    /// </summary>
+    /// <returns>A task that completes when the sinks that support flushing have written their buffered
+    /// events, or when their attempts to do so have failed.</returns>
+    /// <remarks>Flushing is best-effort, and is performed by sinks implementing
+    /// <see cref="IFlushableLogEventSink"/>. Sinks that do not buffer events, or that cannot flush
+    /// on demand, are unaffected.</remarks>
+    public Task FlushAsync()
+    {
+        return _sink is IFlushableLogEventSink flushable ? flushable.FlushAsync() : Task.CompletedTask;
     }
 
     /// <summary>

@@ -14,7 +14,7 @@
 
 namespace Serilog.Core.Sinks;
 
-sealed class OptionalInterfaceForwardingSink : ILogEventSink, IDisposable, ISetLoggingFailureListener
+sealed class OptionalInterfaceForwardingSink : ILogEventSink, IFlushableLogEventSink, IDisposable, ISetLoggingFailureListener
 #if FEATURE_ASYNCDISPOSABLE
     , IAsyncDisposable
 #endif
@@ -65,6 +65,21 @@ sealed class OptionalInterfaceForwardingSink : ILogEventSink, IDisposable, ISetL
         _sink.Emit(logEvent);
     }
 
+    public async Task FlushAsync()
+    {
+        // Mirrors `Dispose()`: the wrapper and the receiver are distinct sinks. Flushing is idempotent,
+        // so it is safe if the wrapper also happens to forward the request to the receiver.
+        if (_sink is IFlushableLogEventSink inner)
+        {
+            await inner.FlushAsync();
+        }
+
+        if (_receiver is IFlushableLogEventSink receiver)
+        {
+            await receiver.FlushAsync();
+        }
+    }
+
     public void SetFailureListener(ILoggingFailureListener listener)
     {
         (_sink as ISetLoggingFailureListener)?.SetFailureListener(listener);
@@ -74,6 +89,7 @@ sealed class OptionalInterfaceForwardingSink : ILogEventSink, IDisposable, ISetL
     public static bool SupportsAny(ILogEventSink possibleReceiver)
     {
         return possibleReceiver is ISetLoggingFailureListener
+                or IFlushableLogEventSink
                 or IDisposable
 #if FEATURE_ASYNCDISPOSABLE
                 or IAsyncDisposable
@@ -84,6 +100,7 @@ sealed class OptionalInterfaceForwardingSink : ILogEventSink, IDisposable, ISetL
     public static bool SupportsAll(ILogEventSink possibleReceiver)
     {
         return possibleReceiver is ISetLoggingFailureListener
+                and IFlushableLogEventSink
                 and IDisposable
 #if FEATURE_ASYNCDISPOSABLE
                 and IAsyncDisposable

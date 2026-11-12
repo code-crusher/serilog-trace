@@ -30,4 +30,24 @@ public static class LoggerExtensions
             ? logger.ForContext(propertyName, value, destructureObjects)
             : logger;
     }
+
+    /// <summary>
+    /// Write any buffered log events to the sinks in the logger's pipeline, without closing or
+    /// disposing the logger. Logging can continue normally afterwards.
+    /// </summary>
+    /// <param name="logger">The logger.</param>
+    /// <returns>A task that completes when the sinks that support flushing have written their buffered
+    /// events, or when their attempts to do so have failed.</returns>
+    /// <exception cref="ArgumentNullException">When <paramref name="logger"/> is <code>null</code></exception>
+    /// <remarks>Flushing is best-effort, and is performed by sinks implementing
+    /// <see cref="IFlushableLogEventSink"/>. Loggers and sinks that do not buffer events, or that cannot
+    /// flush on demand, are unaffected.</remarks>
+    public static Task FlushAsync(this ILogger logger)
+    {
+        Guard.AgainstNull(logger);
+
+        return logger is IFlushableLogEventSink flushable
+            ? flushable.FlushAsync()
+            : Task.CompletedTask;
+    }
 }

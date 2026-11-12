@@ -14,7 +14,7 @@
 
 namespace Serilog.Core.Sinks;
 
-class SafeAggregateSink : ILogEventSink
+class SafeAggregateSink : ILogEventSink, IFlushableLogEventSink
 {
     readonly ILogEventSink[] _sinks;
 
@@ -35,6 +35,23 @@ class SafeAggregateSink : ILogEventSink
             catch (Exception ex)
             {
                 SelfLog.WriteLine("Caught exception while emitting to sink {0}: {1}", sink, ex);
+            }
+        }
+    }
+
+    public async Task FlushAsync()
+    {
+        foreach (var sink in _sinks)
+        {
+            if (sink is not IFlushableLogEventSink flushable) continue;
+
+            try
+            {
+                await flushable.FlushAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                SelfLog.WriteLine("Caught exception while flushing sink {0}: {1}", sink, ex);
             }
         }
     }

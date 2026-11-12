@@ -101,6 +101,125 @@ public class BatchingSinkTests
         Assert.Equal(default, observed);
     }
 
+    [Fact]
+    public async Task FlushingWritesBufferedEventsWithoutDisposingTheSink()
+    {
+        var bs = new InMemoryBatchedSink(TimeSpan.Zero);
+        var pbs = new BatchingSink(bs, new()
+        {
+            BatchSizeLimit = 2, BufferingTimeLimit = TimeSpan.FromMinutes(1), EagerlyEmitFirstEvent = false
+        });
+
+        var evt = Some.InformationEvent();
+        pbs.Emit(evt);
+
+        await pbs.FlushAsync();
+
+        var batch = Assert.Single(bs.Batches);
+        Assert.Same(evt, Assert.Single(batch));
+        Assert.False(bs.IsDisposed);
+        Assert.False(bs.WasCalledAfterDisposal);
+    }
+
+    [Fact]
+    public async Task FlushingIsANoOpWhenNoEventsAreBuffered()
+    {
+        var bs = new InMemoryBatchedSink(TimeSpan.Zero);
+        var pbs = new BatchingSink(bs, new()
+        {
+            BatchSizeLimit = 2, BufferingTimeLimit = TimeSpan.FromMinutes(1), EagerlyEmitFirstEvent = false
+        });
+
+        await pbs.FlushAsync();
+
+        Assert.Empty(bs.Batches);
+        Assert.False(bs.IsDisposed);
+    }
+
+    [Fact]
+    public async Task EventsEmittedAfterFlushAreStillWritten()
+    {
+        var bs = new InMemoryBatchedSink(TimeSpan.Zero);
+        var pbs = new BatchingSink(bs, new()
+        {
+            BatchSizeLimit = 2, BufferingTimeLimit = TimeSpan.FromMinutes(1), EagerlyEmitFirstEvent = false
+        });
+
+        var first = Some.InformationEvent();
+        pbs.Emit(first);
+        await pbs.FlushAsync();
+
+        var second = Some.InformationEvent();
+        pbs.Emit(second);
+        await pbs.FlushAsync();
+
+        Assert.Equal(2, bs.Batches.Count);
+        Assert.Same(first, Assert.Single(bs.Batches[0]));
+        Assert.Same(second, Assert.Single(bs.Batches[1]));
+        Assert.False(bs.IsDisposed);
+    }
+
+    [Fact]
+    public async Task FlushingFlushesTheTargetSink()
+    {
+        var flushable = new FlushTrackingBatchedSink();
+        var pbs = new BatchingSink(flushable, new() { BufferingTimeLimit = TimeSpan.FromMinutes(1) });
+
+        await pbs.FlushAsync();
+
+        Assert.True(flushable.IsFlushed);
+    }
+
+    [Fact]
+    public async Task FlushingCompletesWhenTheBatchCannotBeWritten()
+    {
+        var bs = new CallbackBatchedSink(_ => Task.FromException(new InvalidOperationException("Failed.")));
+        var listener = new CollectingFailureListener();
+        var pbs = new BatchingSink(bs, new()
+        {
+            BatchSizeLimit = 2, BufferingTimeLimit = TimeSpan.FromMinutes(1), EagerlyEmitFirstEvent = false
+        });
+        pbs.SetFailureListener(listener);
+
+        pbs.Emit(Some.InformationEvent());
+        await pbs.FlushAsync();
+
+        Assert.NotEmpty(listener.Failures);
+    }
+
+    [Fact]
+    public async Task FlushingAfterDisposalCompletesImmediately()
+    {
+        var bs = new InMemoryBatchedSink(TimeSpan.Zero);
+        var pbs = new BatchingSink(bs, new() { BufferingTimeLimit = TimeSpan.FromMinutes(1) });
+
+        pbs.Dispose();
+        await pbs.FlushAsync();
+
+        Assert.True(bs.IsDisposed);
+    }
+
+    [Fact]
+    public async Task ConcurrentFlushRequestsAreAllCompleted()
+    {
+        var bs = new InMemoryBatchedSink(TimeSpan.Zero);
+        var pbs = new BatchingSink(bs, new()
+        {
+            BatchSizeLimit = 2, BufferingTimeLimit = TimeSpan.FromMinutes(1), EagerlyEmitFirstEvent = false
+        });
+
+        pbs.Emit(Some.InformationEvent());
+
+        var flushes = Enumerable.Range(0, 10).Select(_ => pbs.FlushAsync()).ToArray();
+        var all = Task.WhenAll(flushes);
+
+        Assert.Same(all, await Task.WhenAny(all, Task.Delay(TimeSpan.FromSeconds(10))));
+        await all;
+
+        Assert.All(flushes, t => Assert.True(t.IsCompletedSuccessfully));
+        Assert.False(bs.IsDisposed);
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

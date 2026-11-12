@@ -22,13 +22,14 @@ namespace Serilog.Core.Sinks.Batching;
 /// <summary>
 /// Buffers log events into batches for background flushing.
 /// </summary>
-sealed class BatchingSink : ILogEventSink, IDisposable, ISetLoggingFailureListener
+sealed class BatchingSink : ILogEventSink, IFlushableLogEventSink, IDisposable, ISetLoggingFailureListener
 #if FEATURE_ASYNCDISPOSABLE
         , IAsyncDisposable
 #endif
 {
-    // Buffers events from the write- to the read side.
-    readonly Channel<LogEvent> _queue;
+    // Buffers events from the write- to the read side. Flush requests are written to the queue alongside
+    // events, so that they are observed after all of the events that were emitted before them.
+    readonly Channel<object> _queue;
 
     // These fields are used by the write side to signal shutdown.
     // A mutex is required because the queue writer `Complete()` call is not idempotent and will throw if
@@ -70,8 +71,8 @@ sealed class BatchingSink : ILogEventSink, IDisposable, ISetLoggingFailureListen
         _targetSink = batchedSink ?? throw new ArgumentNullException(nameof(batchedSink));
         _batchSizeLimit = options.BatchSizeLimit;
         _queue = options.QueueLimit is { } limit
-            ? Channel.CreateBounded<LogEvent>(new BoundedChannelOptions(limit) { SingleReader = true })
-            : Channel.CreateUnbounded<LogEvent>(new UnboundedChannelOptions { SingleReader = true });
+            ? Channel.CreateBounded<object>(new BoundedChannelOptions(limit) { SingleReader = true })
+            : Channel.CreateUnbounded<object>(new UnboundedChannelOptions { SingleReader = true });
         _batchScheduler = new FailureAwareBatchScheduler(options.BufferingTimeLimit, options.RetryTimeLimit);
         _eagerlyEmitFirstEvent = options.EagerlyEmitFirstEvent;
         _waitForShutdownSignal = Task.Delay(Timeout.InfiniteTimeSpan, _shutdownSignal.Token)
@@ -105,6 +106,36 @@ sealed class BatchingSink : ILogEventSink, IDisposable, ISetLoggingFailureListen
         _queue.Writer.TryWrite(logEvent);
     }
 
+    /// <summary>
+    /// Write any buffered events to the target sink. The sink remains open, and logging can continue
+    /// afterwards.
+    /// </summary>
+    public async Task FlushAsync()
+    {
+        if (_shutdownSignal.IsCancellationRequested)
+            return;
+
+        var request = new FlushRequest();
+
+        try
+        {
+            // The queue may be full; wait for space rather than dropping the request.
+            await _queue.Writer.WriteAsync(request, _shutdownSignal.Token).ConfigureAwait(false);
+
+            // If the run loop terminates before the request is observed (for example, during shutdown),
+            // there is nothing left to wait for.
+            await Task.WhenAny(request.Completion.Task, _runLoop).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // The sink was disposed while waiting for queue space; there is nothing left to flush.
+        }
+        catch (ChannelClosedException)
+        {
+            // The sink was disposed concurrently; there is nothing left to flush.
+        }
+    }
+
     async Task LoopAsync()
     {
         var isEagerBatch = _eagerlyEmitFirstEvent;
@@ -115,17 +146,34 @@ sealed class BatchingSink : ILogEventSink, IDisposable, ISetLoggingFailureListen
             // consideration in order for the sink to function robustly (i.e. to avoid hot/infinite looping).
 
             var fillBatch = Task.Delay(_batchScheduler.NextInterval);
+            FlushRequest? flushRequest = null;
             do
             {
                 while (_currentBatch.Count < _batchSizeLimit &&
                        !_shutdownSignal.IsCancellationRequested &&
                        _queue.Reader.TryRead(out var next))
                 {
-                    _currentBatch.Enqueue(next);
+                    if (next is FlushRequest request)
+                    {
+                        flushRequest = request;
+                        break;
+                    }
+
+                    _currentBatch.Enqueue((LogEvent)next);
                 }
-            } while ((_currentBatch.Count < _batchSizeLimit && !isEagerBatch || _currentBatch.Count == 0) &&
+            } while (flushRequest == null &&
+                     (_currentBatch.Count < _batchSizeLimit && !isEagerBatch || _currentBatch.Count == 0) &&
                      !_shutdownSignal.IsCancellationRequested &&
                      await TryWaitToReadAsync(_queue.Reader, fillBatch, _shutdownSignal.Token).ConfigureAwait(false));
+
+            if (flushRequest != null)
+            {
+                // Everything queued before the request has now been read into `_currentBatch`.
+                if (await FlushCurrentBatchAsync(flushRequest).ConfigureAwait(false))
+                    isEagerBatch = false;
+
+                continue;
+            }
 
             try
             {
@@ -183,7 +231,11 @@ sealed class BatchingSink : ILogEventSink, IDisposable, ISetLoggingFailureListen
                 while (_currentBatch.Count < _batchSizeLimit &&
                        _queue.Reader.TryRead(out var next))
                 {
-                    _currentBatch.Enqueue(next);
+                    // Any remaining flush requests are completed once shutdown is complete.
+                    if (next is FlushRequest)
+                        continue;
+
+                    _currentBatch.Enqueue((LogEvent)next);
                 }
 
                 if (_currentBatch.Count != 0)
@@ -198,6 +250,54 @@ sealed class BatchingSink : ILogEventSink, IDisposable, ISetLoggingFailureListen
             _failureListener.OnLoggingFailed(this, LoggingFailureKind.Permanent, "dropping the current batch", _currentBatch, ex);
             DrainOnFailure(LoggingFailureKind.Final, "failed emitting a batch during shutdown; dropping remaining queued events", ex, ignoreShutdownSignal: true);
         }
+    }
+
+    // Emits whatever is buffered, then acknowledges the flush request. Failures are reported in the same
+    // way as for regular batches, but do not fail the flush. Returns true if a batch was emitted.
+    async Task<bool> FlushCurrentBatchAsync(FlushRequest request)
+    {
+        var emitted = false;
+
+        if (_currentBatch.Count != 0)
+        {
+            emitted = true;
+
+            try
+            {
+                await EmitCurrentBatchAsync().ConfigureAwait(false);
+
+                _currentBatch.Clear();
+                _batchScheduler.MarkSuccess();
+            }
+            catch (Exception ex)
+            {
+                _failureListener.OnLoggingFailed(this, LoggingFailureKind.Temporary, "failed emitting a batch during flush", _currentBatch, ex);
+                _batchScheduler.MarkFailure(out var shouldDropBatch, out _);
+
+                if (shouldDropBatch)
+                {
+                    _failureListener.OnLoggingFailed(this, LoggingFailureKind.Permanent, "dropping the current batch", _currentBatch, ex);
+                    _currentBatch.Clear();
+                }
+            }
+        }
+
+        // The target sink may itself buffer the batches it receives.
+        if (_targetSink is IFlushableLogEventSink flushableTarget)
+        {
+            try
+            {
+                await flushableTarget.FlushAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _failureListener.OnLoggingFailed(this, LoggingFailureKind.Temporary, "failed flushing the target sink", events: null, ex);
+            }
+        }
+
+        request.Completion.TrySetResult(null);
+
+        return emitted;
     }
 
     // Emits the current batch, timing the call so that the latency of the target (usually remote) sink can be
@@ -244,9 +344,16 @@ sealed class BatchingSink : ILogEventSink, IDisposable, ISetLoggingFailureListen
         // Not ideal, uses some CPU capacity unnecessarily and doesn't complete in bounded time. The goal is
         // to reduce memory pressure on the client if the server is offline for extended periods. May be
         // worth reviewing and possibly abandoning this.
-        while (_queue.Reader.TryRead(out var logEvent) && (ignoreShutdownSignal || !_shutdownSignal.IsCancellationRequested))
+        while (_queue.Reader.TryRead(out var next) && (ignoreShutdownSignal || !_shutdownSignal.IsCancellationRequested))
         {
-            buffer.Add(logEvent);
+            if (next is FlushRequest request)
+            {
+                // The sink is being shut down, so the request cannot be honored.
+                request.Completion.TrySetResult(null);
+                continue;
+            }
+
+            buffer.Add((LogEvent)next);
 
             if (buffer.Count == bufferLimit)
             {
@@ -259,7 +366,7 @@ sealed class BatchingSink : ILogEventSink, IDisposable, ISetLoggingFailureListen
     }
 
     // Wait until `reader` has items to read. Returns `false` if the `timeout` task completes, or if the reader is cancelled.
-    async Task<bool> TryWaitToReadAsync(ChannelReader<LogEvent> reader, Task timeout, CancellationToken cancellationToken)
+    async Task<bool> TryWaitToReadAsync(ChannelReader<object> reader, Task timeout, CancellationToken cancellationToken)
     {
         var waitToRead = _cachedWaitToRead ?? reader.WaitToReadAsync(cancellationToken).AsTask();
         _cachedWaitToRead = null;
@@ -351,5 +458,12 @@ sealed class BatchingSink : ILogEventSink, IDisposable, ISetLoggingFailureListen
                 _shutdownSignal.Cancel();
             }
         }
+    }
+
+    // Queued alongside events so that the read side observes it in order, after any events emitted before it.
+    sealed class FlushRequest
+    {
+        public TaskCompletionSource<object?> Completion { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 }
