@@ -326,7 +326,7 @@ namespace Serilog.Core
     public class LoggingLevelSwitch
     {
         public LoggingLevelSwitch(Serilog.Events.LogEventLevel initialMinimumLevel = 2) { }
-        public Serilog.Events.LogEventLevel MinimumLevel { get; set; }
+        public virtual Serilog.Events.LogEventLevel MinimumLevel { get; set; }
         public event System.EventHandler<Serilog.Core.LoggingLevelSwitchChangedEventArgs>? MinimumLevelChanged;
     }
     public class LoggingLevelSwitchChangedEventArgs : System.EventArgs

@@ -42,9 +42,16 @@ public class LoggingLevelSwitch
     /// The current minimum level, below which no events
     /// should be generated.
     /// </summary>
+    /// <remarks>
+    /// This property is virtual so that derived switches can provide a level that varies
+    /// with ambient state, such as the current tenant or request. A derived switch can be
+    /// used anywhere a <see cref="LoggingLevelSwitch"/> is accepted, including
+    /// <c>MinimumLevel.ControlledBy()</c> and the level switch parameters of the sink and
+    /// enricher configuration methods.
+    /// </remarks>
     // Reading this property generates a memory barrier,
     // so needs to be used judiciously in the logging pipeline.
-    public LogEventLevel MinimumLevel
+    public virtual LogEventLevel MinimumLevel
     {
         get { return _minimumLevel; }
         set
