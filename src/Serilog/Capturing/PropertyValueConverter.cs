@@ -139,14 +139,11 @@ partial class PropertyValueConverter : ILogEventPropertyFactory, ILogEventProper
         if (value is string)
             return new ScalarValue(value);
 
-        foreach (var scalarConversionPolicy in _scalarConversionPolicies)
-        {
-            if (scalarConversionPolicy.TryConvertToScalar(value, out var converted))
-                return converted;
-        }
-
         DepthLimiter.SetCurrentDepth(depth);
 
+        // Destructuring policies, when destructuring is requested, take precedence over
+        // scalar conversion so that policies have the first opportunity to handle values
+        // that would otherwise be converted to scalars, e.g. byte arrays (#1954).
         if (destructuring == Destructuring.Destructure)
         {
             foreach (var destructuringPolicy in _destructuringPolicies)
@@ -154,6 +151,12 @@ partial class PropertyValueConverter : ILogEventPropertyFactory, ILogEventProper
                 if (destructuringPolicy.TryDestructure(value, _depthLimiter, out var result))
                     return result;
             }
+        }
+
+        foreach (var scalarConversionPolicy in _scalarConversionPolicies)
+        {
+            if (scalarConversionPolicy.TryConvertToScalar(value, out var converted))
+                return converted;
         }
 
         var type = value.GetType();

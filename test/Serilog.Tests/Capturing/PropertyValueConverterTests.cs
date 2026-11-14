@@ -71,6 +71,37 @@ public class PropertyValueConverterTests
     }
 
     [Fact]
+    public void UnderDestructuringAByteArrayIsPassedToRegisteredDestructuringPolicies()
+    {
+        var converter = new PropertyValueConverter(10, 1000, 1000, [], [],
+            [new DelegateDestructuringPolicy()], false);
+
+        var pv = converter.CreatePropertyValue(new byte[] { 1 }, Destructuring.Destructure);
+        Assert.IsType<ScalarValue>(pv);
+        Assert.Equal("TEST", ((ScalarValue)pv).Value);
+    }
+
+    [Fact]
+    public void ByDefaultAByteArrayIsNotPassedToRegisteredDestructuringPolicies()
+    {
+        var converter = new PropertyValueConverter(10, 1000, 1000, [], [],
+            [new DelegateDestructuringPolicy()], false);
+
+        var pv = converter.CreatePropertyValue(new byte[] { 1 });
+        Assert.IsType<ScalarValue>(pv);
+        Assert.Equal("01", ((ScalarValue)pv).Value);
+    }
+
+    class DelegateDestructuringPolicy : IDestructuringPolicy
+    {
+        public bool TryDestructure(object value, ILogEventPropertyValueFactory propertyValueFactory, [NotNullWhen(true)] out LogEventPropertyValue? result)
+        {
+            result = propertyValueFactory.CreatePropertyValue("TEST");
+            return true;
+        }
+    }
+
+    [Fact]
     public void UnderDestructuringABooleanIsAScalarValue()
     {
         var pv = _converter.CreatePropertyValue(true, Destructuring.Destructure);
