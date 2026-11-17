@@ -79,6 +79,44 @@ public class PropertyValueConverterTests
     }
 
     [Fact]
+    public void CommonScalarValuesAreCached()
+    {
+        Assert.Same(ScalarValue.EmptyString, _converter.CreatePropertyValue("", Destructuring.Default));
+        Assert.Same(ScalarValue.True, _converter.CreatePropertyValue(true, Destructuring.Default));
+        Assert.Same(ScalarValue.False, _converter.CreatePropertyValue(false, Destructuring.Default));
+        Assert.Same(ScalarValue.Zero, _converter.CreatePropertyValue(0, Destructuring.Default));
+        Assert.Same(ScalarValue.One, _converter.CreatePropertyValue(1, Destructuring.Default));
+        Assert.Same(ScalarValue.MinusOne, _converter.CreatePropertyValue(-1, Destructuring.Default));
+        Assert.Same(ScalarValue.Null, _converter.CreatePropertyValue(null, Destructuring.Default));
+    }
+
+    [Fact]
+    public void OtherScalarValuesAreNotCached()
+    {
+        Assert.NotSame(_converter.CreatePropertyValue("a", Destructuring.Default), _converter.CreatePropertyValue("a", Destructuring.Default));
+        Assert.NotSame(_converter.CreatePropertyValue(2, Destructuring.Default), _converter.CreatePropertyValue(2, Destructuring.Default));
+    }
+
+    class ToStringReturnsEmpty
+    {
+        public override string ToString() => "";
+    }
+
+    class ToStringReturnsNull
+    {
+        public override string? ToString() => null;
+    }
+
+    [Fact]
+    public void StringifiedEmptyValuesUseTheCachedEmptyString()
+    {
+        Assert.Same(ScalarValue.EmptyString, _converter.CreatePropertyValue(new ToStringReturnsEmpty(), Destructuring.Default));
+        Assert.Same(ScalarValue.EmptyString, _converter.CreatePropertyValue(new ToStringReturnsNull(), Destructuring.Default));
+        Assert.Same(ScalarValue.EmptyString, _converter.CreatePropertyValue(new ToStringReturnsEmpty(), Destructuring.Stringify));
+        Assert.Same(ScalarValue.EmptyString, _converter.CreatePropertyValue(new ToStringReturnsNull(), Destructuring.Stringify));
+    }
+
+    [Fact]
     public void UnderDestructuringAnIntegerArrayIsASequenceValue()
     {
         var pv = _converter.CreatePropertyValue(Array.Empty<int>(), Destructuring.Destructure);
