@@ -1,8 +1,23 @@
 <Project>
-    <ItemGroup>
+    <!--
+      Structure values are captured by reflecting over the public properties of arbitrary runtime types,
+      which the trimmer cannot verify have been preserved. Structure-value destructuring is therefore
+      disabled in trimmed applications, including .NET Android release builds, which trim by default.
+
+      Applications that do preserve the metadata of the types they destructure, for example because only
+      referenced assemblies are trimmed, can opt back in:
+
+          <PropertyGroup>
+            <SerilogIsStructureValueSupported>true</SerilogIsStructureValueSupported>
+          </PropertyGroup>
+    -->
+    <!-- `PublishTrimmed` is implied by `PublishAot`, and is assigned by SDK targets imported after this file,
+         so it's tested on the item rather than on a property: item conditions are evaluated after every
+         property, and so see the final value. -->
+    <ItemGroup Condition="'$(PublishTrimmed)' == 'true'">
         <RuntimeHostConfigurationOption
-        Condition="'$(PublishTrimmed)' == 'true'"
         Include="Serilog.Capturing.IsStructureValueSupported"
-        Value="false" Trim="true" />
+        Value="$([MSBuild]::ValueOrDefault('$(SerilogIsStructureValueSupported)', 'false'))"
+        Trim="true" />
     </ItemGroup>
 </Project>
