@@ -1333,7 +1333,7 @@ public interface ILogger
     /// {
     ///     var propsByName = properties.ToDictionary(p => p.Name, p => p.Value);
     ///     Console.WriteLine(template.Render(propsByName, null));
-    ///     // -> "Hello, World!"
+    ///     // -> Hello, World!
     /// }
     /// </code></example>
     [MessageTemplateFormatMethod("messageTemplate")]

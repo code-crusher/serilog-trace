@@ -33,71 +33,71 @@ public class MessageTemplateTests
     }
 
     [Fact]
-    public void AnObjectIsRenderedInSimpleNotation()
+    public void AnObjectIsRenderedAsJson()
     {
         var m = Render("I sat at {@Chair}", new Chair());
-        Assert.Equal("I sat at Chair { Back: \"straight\", Legs: [1, 2, 3, 4] }", m);
+        Assert.Equal("I sat at {\"Back\":\"straight\",\"Legs\":[1,2,3,4],\"$type\":\"Chair\"}", m);
     }
 
     [Fact]
-    public void AnObjectIsRenderedInSimpleNotationUsingFormatProvider()
+    public void AnObjectIsRenderedAsJsonUsingInvariantCulture()
     {
         var m = Render(new CultureInfo("fr-FR"), "I received {@Receipt}", new Receipt());
-        Assert.Equal("I received Receipt { Sum: 12,345, When: 20/05/2013 16:39:00 }", m);
+        Assert.Equal("I received {\"Sum\":12.345,\"When\":\"2013-05-20T16:39:00.0000000\",\"$type\":\"Receipt\"}", m);
     }
 
     [Fact]
-    public void AnAnonymousObjectIsRenderedInSimpleNotationWithoutType()
+    public void AnAnonymousObjectIsRenderedAsJsonWithoutType()
     {
         var m = Render("I sat at {@Chair}", new { Back = "straight", Legs = new[] { 1, 2, 3, 4 } });
-        Assert.Equal("I sat at { Back: \"straight\", Legs: [1, 2, 3, 4] }", m);
+        Assert.Equal("I sat at {\"Back\":\"straight\",\"Legs\":[1,2,3,4]}", m);
     }
 
     [Fact]
-    public void AnAnonymousObjectIsRenderedInSimpleNotationWithoutTypeUsingFormatProvider()
+    public void AnAnonymousObjectIsRenderedAsJsonWithoutTypeUsingInvariantCulture()
     {
         var m = Render(new CultureInfo("fr-FR"), "I received {@Receipt}", new { Sum = 12.345, When = new DateTime(2013, 5, 20, 16, 39, 0) });
-        Assert.Equal("I received { Sum: 12,345, When: 20/05/2013 16:39:00 }", m);
+        Assert.Equal("I received {\"Sum\":12.345,\"When\":\"2013-05-20T16:39:00.0000000\"}", m);
     }
 
     [Fact]
     public void AnObjectWithDefaultDestructuringIsRenderedAsAStringLiteral()
     {
         var m = Render("I sat at {Chair}", new Chair());
-        Assert.Equal("I sat at \"a chair\"", m);
+        Assert.Equal("I sat at a chair", m);
 
         var m2 = Render("I sat at {Obj}", new ToStringReturnsNull());
-        Assert.Equal("I sat at \"\"", m2);
+        Assert.Equal("I sat at ", m2);
 
         var m3 = Render("I sat at {Obj}", new ToStringThrows());
-        Assert.Equal("I sat at \"Capturing the property value threw an exception: ArgumentNullException\"", m3);
+        Assert.Equal("I sat at Capturing the property value threw an exception: ArgumentNullException", m3);
     }
 
     [Fact]
     public void AnObjectWithStringifyDestructuringIsRenderedAsAString()
     {
         var m = Render("I sat at {$Chair}", new Chair());
-        Assert.Equal("I sat at \"a chair\"", m);
+        Assert.Equal("I sat at a chair", m);
 
         var m2 = Render("I sat at {$Obj}", new ToStringReturnsNull());
-        Assert.Equal("I sat at \"\"", m2);
+        Assert.Equal("I sat at ", m2);
 
         var m3 = Render("I sat at {$Obj}", new ToStringThrows());
-        Assert.Equal("I sat at \"Capturing the property value threw an exception: ArgumentNullException\"", m3);
+        Assert.Equal("I sat at Capturing the property value threw an exception: ArgumentNullException", m3);
     }
 
     [Fact]
     public void MultiplePropertiesAreRenderedInOrder()
     {
         var m = Render("Just biting {Fruit} number {Count}", "Apple", 12);
-        Assert.Equal("Just biting \"Apple\" number 12", m);
+        Assert.Equal("Just biting Apple number 12", m);
     }
 
     [Fact]
-    public void MultiplePropertiesUseFormatProvider()
+    public void FormatProviderIsAppliedToExplicitlyFormattedProperties()
     {
         var m = Render(new CultureInfo("fr-FR"), "Income was {Income} at {Date:d}", 1234.567, new DateTime(2013, 5, 20));
-        Assert.Equal("Income was 1234,567 at 20/05/2013", m);
+        Assert.Equal("Income was 1234.567 at 20/05/2013", m);
     }
 
     [Fact]
@@ -120,10 +120,10 @@ public class MessageTemplateTests
     }
 
     [Fact]
-    public void FormatProviderIsUsed()
+    public void FormatProviderIsIgnoredForPropertiesWithoutFormatSpecifiers()
     {
         var m = Render(new CultureInfo("fr-FR"), "Please pay {Sum}", 12.345);
-        Assert.Equal("Please pay 12,345", m);
+        Assert.Equal("Please pay 12.345", m);
     }
 
     static string Render(string messageTemplate, params object[] properties)
@@ -147,14 +147,14 @@ public class MessageTemplateTests
     public void ATemplateWithOnlyPositionalPropertiesIsAnalyzedAndRenderedPositionally()
     {
         var m = Render("{1}, {0}", "world", "Hello");
-        Assert.Equal("\"Hello\", \"world\"", m);
+        Assert.Equal("Hello, world", m);
     }
 
     [Fact]
-    public void ATemplateWithOnlyPositionalPropertiesUsesFormatProvider()
+    public void ATemplateWithOnlyPositionalPropertiesIsRenderedWithDefaultFormatting()
     {
         var m = Render(new CultureInfo("fr-FR"), "{1}, {0}", 12.345, "Hello");
-        Assert.Equal("\"Hello\", 12,345", m);
+        Assert.Equal("Hello, 12.345", m);
     }
 
     // Debatable what the behavior should be, here.
@@ -162,14 +162,14 @@ public class MessageTemplateTests
     public void ATemplateWithNamesAndPositionalsUsesNamesForAllValues()
     {
         var m = Render("{1}, {Place}", "world", "Hello");
-        Assert.Equal("\"world\", \"Hello\"", m);
+        Assert.Equal("world, Hello", m);
     }
 
     [Fact]
     public void MissingPositionalParametersRenderAsTextLikeStandardFormats()
     {
         var m = Render("{1}, {0}", "world");
-        Assert.Equal("{1}, \"world\"", m);
+        Assert.Equal("{1}, world", m);
     }
 
     [Fact]
@@ -177,7 +177,7 @@ public class MessageTemplateTests
     {
         var anonymous = new { Test = 3M };
         var m = Render("Anonymous type {value}", anonymous);
-        Assert.Equal("Anonymous type \"{ Test = 3 }\"", m);
+        Assert.Equal("Anonymous type { Test = 3 }", m);
     }
 
     [Fact]
@@ -195,7 +195,7 @@ public class MessageTemplateTests
         var anonymous = new { Test = 5M };
         var dictionary = Enumerable.Repeat("MyKey", 1).ToDictionary(v => v, _ => anonymous);
         var m = Render("Dictionary with anonymous type value {dictionary}", dictionary);
-        Assert.Equal("Dictionary with anonymous type value [(\"MyKey\": \"{ Test = 5 }\")]", m);
+        Assert.Equal("Dictionary with anonymous type value {\"MyKey\":\"{ Test = 5 }\"}", m);
     }
 
     [Fact]

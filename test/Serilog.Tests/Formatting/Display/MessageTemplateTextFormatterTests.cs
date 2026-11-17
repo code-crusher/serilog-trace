@@ -11,7 +11,7 @@ public class MessageTemplateTextFormatterTests
     public void UsesFormatProvider()
     {
         var french = new CultureInfo("fr-FR");
-        var formatter = new MessageTemplateTextFormatter("{Message}", french);
+        var formatter = new MessageTemplateTextFormatter("{Message:l}", french);
         var evt = DelegatingSink.GetLogEvent(l => l.Information("{0}", 12.345));
         var sw = new StringWriter();
         formatter.Format(evt, sw);
@@ -25,7 +25,7 @@ public class MessageTemplateTextFormatterTests
         var evt = DelegatingSink.GetLogEvent(l => l.Information("{Message}", "Hello, world!"));
         var sw = new StringWriter();
         formatter.Format(evt, sw);
-        Assert.Equal("\"Hello, world!\"", sw.ToString());
+        Assert.Equal("Hello, world!", sw.ToString());
     }
 
     [Fact]
@@ -196,7 +196,7 @@ public class MessageTemplateTextFormatterTests
     [Fact]
     public void AppliesCustomFormatterToEnums()
     {
-        var formatter = new MessageTemplateTextFormatter("{Message}", new SizeFormatter(CultureInfo.InvariantCulture));
+        var formatter = new MessageTemplateTextFormatter("{Message:l}", new SizeFormatter(CultureInfo.InvariantCulture));
         var evt = DelegatingSink.GetLogEvent(l => l.Information("Size {Size}", Size.Large));
         var sw = new StringWriter();
         formatter.Format(evt, sw);
@@ -234,7 +234,7 @@ public class MessageTemplateTextFormatterTests
     }
 
     [Theory]
-    [InlineData("", "Hello, \"World\"!")]
+    [InlineData("", "Hello, World!")]
     [InlineData(":j", "Hello, \"World\"!")]
     [InlineData(":l", "Hello, World!")]
     [InlineData(":lj", "Hello, World!")]
@@ -249,7 +249,7 @@ public class MessageTemplateTextFormatterTests
     }
 
     [Theory]
-    [InlineData("", "{ Name: \"World\" }")]
+    [InlineData("", "{\"Name\":\"World\"}")]
     [InlineData(":j", "{\"Name\":\"World\"}")]
     [InlineData(":lj", "{\"Name\":\"World\"}")]
     [InlineData(":jl", "{\"Name\":\"World\"}")]
@@ -289,7 +289,7 @@ public class MessageTemplateTextFormatterTests
     }
 
     [Theory]
-    [InlineData("", true)]
+    [InlineData("", false)]
     [InlineData(":lj", false)]
     [InlineData(":jl", false)]
     [InlineData(":j", false)]
@@ -322,7 +322,7 @@ public class MessageTemplateTextFormatterTests
     }
 
     [Theory]
-    [InlineData("", true)]
+    [InlineData("", false)]
     [InlineData(":lj", false)]
     [InlineData(":jl", false)]
     [InlineData(":j", false)]

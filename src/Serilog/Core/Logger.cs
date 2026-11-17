@@ -1398,7 +1398,7 @@ public sealed class Logger : ILogger, ILogEventSink, IDisposable
     /// {
     ///     var propsByName = properties.ToDictionary(p => p.Name, p => p.Value);
     ///     Console.WriteLine(template.Render(propsByName, null));
-    ///     // -> "Hello, World!"
+    ///     // -> Hello, World!
     /// }
     /// </example>
     [MessageTemplateFormatMethod("messageTemplate")]

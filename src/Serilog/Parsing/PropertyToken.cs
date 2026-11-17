@@ -64,7 +64,7 @@ public sealed class PropertyToken : MessageTemplateToken
         Guard.AgainstNull(properties);
         Guard.AgainstNull(output);
 
-        MessageTemplateRenderer.RenderPropertyToken(this, properties, output, formatProvider, isLiteral: false, isJson: false);
+        MessageTemplateRenderer.RenderPropertyToken(this, properties, output, formatProvider, isLiteral: true, isJson: true);
     }
 
     /// <summary>

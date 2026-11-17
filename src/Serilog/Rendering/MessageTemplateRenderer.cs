@@ -21,7 +21,10 @@ static class MessageTemplateRenderer
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void Render(MessageTemplate messageTemplate, IReadOnlyDictionary<string, LogEventPropertyValue> properties, TextWriter output, string? format = null, IFormatProvider? formatProvider = null)
     {
-        bool isLiteral = false, isJson = false;
+        // When no format is specified, render as `:lj`: strings are written as literals
+        // rather than quoted, and structured values are rendered as JSON.
+        var isLiteral = format == null;
+        var isJson = format == null;
 
         if (format != null)
         {
